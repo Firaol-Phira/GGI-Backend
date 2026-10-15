@@ -7,7 +7,12 @@ const pool = require("./db");
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: "*", // Allows requests from React frontend
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 // Health Check / Root Endpoint
@@ -72,3 +77,20 @@ app.get(
     res.json({ message: "Welcome to the GGI Admin Audit Console." });
   },
 );
+
+const Contributionroutes = require("./routes/Contributionroute");
+
+// Mount Contribution Routes
+app.use("/api/v1/contributions", Contributionroutes);
+const announcementRoutes = require("./routes/announcementRoutes");
+
+// Mount endpoint
+app.use("/api/v1/announcements", announcementRoutes);
+// DEBUG: Catch any unmatched routes to see what URL the frontend is requesting
+app.use((req, res) => {
+  console.log(`[404 DEBUG] Route not found: ${req.method} ${req.originalUrl}`);
+  res
+    .status(404)
+    .json({ status: "error", message: `Route not found: ${req.originalUrl}` });
+});
+
