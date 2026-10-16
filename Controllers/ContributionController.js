@@ -1,6 +1,7 @@
 const pool = require("../db");
 
 // ========================================================
+// ========================================================
 // 1. SUBMIT CONTRIBUTION (Member)
 // ========================================================
 exports.submitContribution = async (req, res) => {
@@ -21,13 +22,14 @@ exports.submitContribution = async (req, res) => {
       });
     }
 
-    // Check Audit Window (1st to 5th day of the month)
-    // Parse date string directly (e.g. "2026-10-03") to avoid timezone shifts
-    const dateStr = String(paymentDate).split("T")[0]; // "2026-10-03"
-    const dayNumber = parseInt(dateStr.split("-")[2], 10); // 3
+    // SAFE DATE PARSING: Split string directly by hyphens to avoid UTC timezone shifts
+    const dateStr = String(paymentDate).split("T")[0]; // e.g., "2026-10-15"
+    const parts = dateStr.split("-");
+    const dayNumber = parseInt(parts[2], 10); // Extracts exact day (15)
 
-    // 1st through 5th of the month = 1 (On-Time), otherwise 0 (Late)
-    const isOnTime = dayNumber >= 1 && dayNumber <= 5 ? 1 : 0;
+    // 11th through 16th of the month = 1 (On-Time), otherwise 0 (Late)
+    const isOnTime = dayNumber >= 11 && dayNumber <= 16 ? 1 : 0;
+
     // Check if transaction reference already exists
     const [existingTx] = await pool.query(
       "SELECT id FROM contributions WHERE transaction_reference = ?",
@@ -60,7 +62,7 @@ exports.submitContribution = async (req, res) => {
       status: "success",
       message: isOnTime
         ? "Contribution submitted successfully within the audit window!"
-        : "Contribution submitted. Flagged as late submission (outside 1st-5th audit window).",
+        : "Contribution submitted. Flagged as late submission (outside 11th-16th audit window).",
       contributionId: result.insertId,
       isOnTime,
     });
