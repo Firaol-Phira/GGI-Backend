@@ -5,9 +5,10 @@ const pool = require("../db");
 // 1. SUBMIT CONTRIBUTION (Member)
 // ========================================================
 exports.submitContribution = async (req, res) => {
-  const userId = req.user.id; // Extracted from JWT token via middleware
+  const userId = req.user.id;
   const {
     amount,
+    paymentType, // <--- Add paymentType here ('monthly' or 'yearly')
     paymentDate,
     paymentMethod,
     transactionReference,
@@ -15,22 +16,18 @@ exports.submitContribution = async (req, res) => {
   } = req.body;
 
   try {
-    if (!amount || !paymentDate || !transactionReference) {
+    if (!amount || !paymentDate || !transactionReference || !paymentType) {
       return res.status(400).json({
         message:
-          "Amount, payment date, and transaction reference are required.",
+          "Amount, payment type, payment date, and transaction reference are required.",
       });
     }
 
-    // SAFE DATE PARSING: Split string directly by hyphens to avoid UTC timezone shifts
-    const dateStr = String(paymentDate).split("T")[0]; // e.g., "2026-10-15"
-    const parts = dateStr.split("-");
-    const dayNumber = parseInt(parts[2], 10); // Extracts exact day (15)
-
-    // 11th through 16th of the month = 1 (On-Time), otherwise 0 (Late)
+    // Safe timezone parsing for 11th–16th window
+    const dateStr = String(paymentDate).split("T")[0];
+    const dayNumber = parseInt(dateStr.split("-")[2], 10);
     const isOnTime = dayNumber >= 11 && dayNumber <= 16 ? 1 : 0;
 
-    // Check if transaction reference already exists
     const [existingTx] = await pool.query(
       "SELECT id FROM contributions WHERE transaction_reference = ?",
       [transactionReference],
@@ -42,14 +39,15 @@ exports.submitContribution = async (req, res) => {
       });
     }
 
-    // Insert new contribution record
+    // Insert with payment_type
     const [result] = await pool.query(
       `INSERT INTO contributions 
-       (user_id, amount, payment_date, payment_method, transaction_reference, receipt_url, is_on_time, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+       (user_id, amount, payment_type, payment_date, payment_method, transaction_reference, receipt_url, is_on_time, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
         userId,
         amount,
+        paymentType, // <--- Saved here
         paymentDate,
         paymentMethod || "CBE (Commercial Bank of Ethiopia)",
         transactionReference,
@@ -60,11 +58,8 @@ exports.submitContribution = async (req, res) => {
 
     res.status(201).json({
       status: "success",
-      message: isOnTime
-        ? "Contribution submitted successfully within the audit window!"
-        : "Contribution submitted. Flagged as late submission (outside 11th-16th audit window).",
+      message: "Contribution submitted successfully!",
       contributionId: result.insertId,
-      isOnTime,
     });
   } catch (err) {
     console.error("Submit contribution error:", err.message);
@@ -85,7 +80,7 @@ exports.getMyContributions = async (req, res) => {
 
   try {
     const [contributions] = await pool.query(
-      `SELECT id, amount, payment_date, payment_method, transaction_reference, receipt_url, is_on_time, status, audit_notes, created_at 
+      `SELECT id, amount, payment_date,payment_type, payment_method, transaction_reference, receipt_url, is_on_time, status, audit_notes, created_at 
        FROM contributions 
        WHERE user_id = ? 
        ORDER BY payment_date DESC`,
@@ -110,7 +105,7 @@ exports.getMyContributions = async (req, res) => {
 exports.getAllContributions = async (req, res) => {
   try {
     const [contributions] = await pool.query(
-      `SELECT c.id, c.amount, c.payment_date, c.payment_method, c.transaction_reference, 
+      `SELECT c.id, c.amount, c.payment_date, c.payment_type,c.payment_method, c.transaction_reference, 
               c.receipt_url, c.is_on_time, c.status, c.audit_notes, c.created_at,
               u.full_name AS member_name, u.email AS member_email
        FROM contributions c
